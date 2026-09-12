@@ -90,19 +90,19 @@ public class MainActivity extends Activity {
     static final class SnakeView extends View implements Choreographer.FrameCallback {
         private static final int GRID = 20;
 
-        private static final int BG = Color.rgb(6, 12, 10);
+        private static final int BG = Color.rgb(5, 11, 9);
         private static final int SURFACE = Color.rgb(14, 25, 20);
-        private static final int SURFACE_2 = Color.rgb(18, 34, 27);
-        private static final int BOARD = Color.rgb(8, 17, 14);
-        private static final int BORDER = Color.rgb(35, 63, 49);
-        private static final int GRID_LINE = Color.rgb(20, 39, 31);
-        private static final int TEXT = Color.rgb(244, 249, 246);
-        private static final int MUTED = Color.rgb(132, 153, 143);
-        private static final int GREEN = Color.rgb(98, 236, 123);
-        private static final int GREEN_BRIGHT = Color.rgb(183, 255, 146);
-        private static final int GREEN_DARK = Color.rgb(31, 96, 54);
-        private static final int RED = Color.rgb(255, 94, 108);
-        private static final int PRESSED = Color.rgb(35, 88, 57);
+        private static final int SURFACE_2 = Color.rgb(18, 35, 27);
+        private static final int BOARD = Color.rgb(7, 16, 13);
+        private static final int BORDER = Color.rgb(34, 63, 49);
+        private static final int GRID_LINE = Color.rgb(20, 38, 31);
+        private static final int TEXT = Color.rgb(245, 250, 247);
+        private static final int MUTED = Color.rgb(137, 158, 148);
+        private static final int GREEN = Color.rgb(91, 235, 119);
+        private static final int GREEN_BRIGHT = Color.rgb(184, 255, 147);
+        private static final int GREEN_DARK = Color.rgb(29, 91, 50);
+        private static final int RED = Color.rgb(255, 93, 106);
+        private static final int PRESSED = Color.rgb(31, 83, 54);
 
         private static final Typeface REGULAR = Typeface.create("sans-serif", Typeface.NORMAL);
         private static final Typeface BOLD = Typeface.create("sans-serif", Typeface.BOLD);
@@ -136,7 +136,7 @@ public class MainActivity extends Activity {
         private boolean gameOver = false;
         private boolean lifecyclePaused = false;
         private boolean frameLoopRunning = false;
-        private boolean gestureTurnConsumed = false;
+        private boolean swipeArmed = false;
         private float density;
         private float boardLeft;
         private float boardTop;
@@ -144,6 +144,8 @@ public class MainActivity extends Activity {
         private float cell;
         private float touchDownX;
         private float touchDownY;
+        private float swipeAnchorX;
+        private float swipeAnchorY;
         private float renderAlpha = 1f;
         private float swipeThreshold;
         private long tickMs = 150L;
@@ -154,7 +156,7 @@ public class MainActivity extends Activity {
         SnakeView(Context context) {
             super(context);
             density = context.getResources().getDisplayMetrics().density;
-            swipeThreshold = dp(20);
+            swipeThreshold = dp(18);
             prefs = context.getSharedPreferences("snake_scores", Context.MODE_PRIVATE);
             highScore = prefs.getInt("high_score", 0);
             setFocusable(true);
@@ -201,51 +203,61 @@ public class MainActivity extends Activity {
         protected void onSizeChanged(int w, int h, int oldw, int oldh) {
             float side = dp(12);
             float top = dp(12);
-            float headerH = dp(78);
+            float headerH = dp(104);
             headerRect.set(side, top, w - side, top + headerH);
 
-            float availableWidth = w - side * 2f;
-            float controlsMinH = dp(180);
-            float bottomSafe = dp(18);
             float boardGap = dp(10);
+            float bottomSafe = dp(16);
+            float controlsMinH = dp(190);
+            float availableWidth = w - side * 2f;
             float availableForBoard = h - headerRect.bottom - controlsMinH - bottomSafe - boardGap * 2f;
             boardSize = Math.min(availableWidth, availableForBoard);
-            boardSize = Math.max(dp(250), boardSize);
+            boardSize = Math.max(dp(248), boardSize);
             boardLeft = (w - boardSize) / 2f;
             boardTop = headerRect.bottom + boardGap;
             cell = boardSize / GRID;
             boardRect.set(boardLeft, boardTop, boardLeft + boardSize, boardTop + boardSize);
 
-            float actionH = dp(32);
-            float actionW = dp(92);
-            pauseRect.set(headerRect.left + dp(10), headerRect.bottom - actionH - dp(8),
-                    headerRect.left + dp(10) + actionW, headerRect.bottom - dp(8));
-            restartRect.set(headerRect.right - dp(10) - actionW, headerRect.bottom - actionH - dp(8),
-                    headerRect.right - dp(10), headerRect.bottom - dp(8));
+            float actionH = dp(38);
+            float actionW = Math.min(dp(112), headerRect.width() * .29f);
+            float actionTop = headerRect.top + dp(58);
+            pauseRect.set(headerRect.left + dp(12), actionTop,
+                    headerRect.left + dp(12) + actionW, actionTop + actionH);
+            restartRect.set(headerRect.right - dp(12) - actionW, actionTop,
+                    headerRect.right - dp(12), actionTop + actionH);
 
             float controlsTop = boardRect.bottom + dp(10);
             float controlsBottom = h - bottomSafe;
             controlsRect.set(side, controlsTop, w - side, controlsBottom);
 
             float cx = controlsRect.centerX();
-            float btnH = Math.min(dp(66), Math.max(dp(56), controlsRect.height() * .34f));
+            float btnH = Math.min(dp(70), Math.max(dp(58), controlsRect.height() * .32f));
             float upW = dp(92);
             float horizontalW = Math.min(dp(104), (controlsRect.width() - dp(64)) / 3f);
-            float centerW = Math.min(dp(110), horizontalW + dp(8));
+            float centerW = Math.min(dp(112), horizontalW + dp(10));
             float gap = dp(8);
 
             float totalControlsH = btnH * 2f + gap;
-            float firstTop = controlsRect.top + Math.max(dp(16), (controlsRect.height() - totalControlsH) * .45f);
+            float titleReserve = dp(40);
+            float free = Math.max(0f, controlsRect.height() - titleReserve - totalControlsH);
+            float firstTop = controlsRect.top + titleReserve + free * .34f;
             upRect.set(cx - upW / 2f, firstTop, cx + upW / 2f, firstTop + btnH);
             float rowTop = upRect.bottom + gap;
             downRect.set(cx - centerW / 2f, rowTop, cx + centerW / 2f, rowTop + btnH);
             leftRect.set(downRect.left - gap - horizontalW, rowTop, downRect.left - gap, rowTop + btnH);
             rightRect.set(downRect.right + gap, rowTop, downRect.right + gap + horizontalW, rowTop + btnH);
 
-            overlayRect.set(boardRect.left + boardSize * .08f, boardRect.top + boardSize * .31f,
-                    boardRect.right - boardSize * .08f, boardRect.top + boardSize * .69f);
-            playAgainRect.set(overlayRect.left + dp(22), overlayRect.bottom - dp(56),
-                    overlayRect.right - dp(22), overlayRect.bottom - dp(14));
+            float overlayH = Math.min(dp(196), boardSize * .42f);
+            overlayH = Math.max(dp(174), overlayH);
+            float overlayWInset = Math.max(dp(28), boardSize * .08f);
+            float overlayTop = boardRect.centerY() - overlayH / 2f;
+            overlayRect.set(boardRect.left + overlayWInset, overlayTop,
+                    boardRect.right - overlayWInset, overlayTop + overlayH);
+
+            float buttonH = dp(48);
+            float buttonBottom = overlayRect.bottom - dp(16);
+            playAgainRect.set(overlayRect.left + dp(24), buttonBottom - buttonH,
+                    overlayRect.right - dp(24), buttonBottom);
         }
 
         private void restartGame() {
@@ -373,14 +385,16 @@ public class MainActivity extends Activity {
         private void drawHeader(Canvas c) {
             drawPanel(c, headerRect, dp(18), SURFACE, BORDER);
 
-            drawText(c, "SNAKE", headerRect.left + dp(14), headerRect.top + dp(23), dp(18), TEXT, true, Paint.Align.LEFT);
-            drawText(c, "SMOOTH MODE", headerRect.left + dp(14), headerRect.top + dp(40), dp(9), GREEN, true, Paint.Align.LEFT);
+            float titleY = headerRect.top + dp(27);
+            float labelY = headerRect.top + dp(46);
+            drawText(c, "SNAKE", headerRect.left + dp(14), titleY, dp(18), TEXT, true, Paint.Align.LEFT);
+            drawText(c, "SMOOTH MODE", headerRect.left + dp(14), labelY, dp(9), GREEN, true, Paint.Align.LEFT);
 
-            drawText(c, String.valueOf(score), headerRect.centerX(), headerRect.top + dp(26), dp(21), TEXT, true, Paint.Align.CENTER);
-            drawText(c, "SCORE", headerRect.centerX(), headerRect.top + dp(42), dp(8.5f), MUTED, true, Paint.Align.CENTER);
+            drawText(c, String.valueOf(score), headerRect.centerX(), titleY + dp(2), dp(21), TEXT, true, Paint.Align.CENTER);
+            drawText(c, "SCORE", headerRect.centerX(), labelY, dp(8.5f), MUTED, true, Paint.Align.CENTER);
 
-            drawText(c, String.valueOf(highScore), headerRect.right - dp(14), headerRect.top + dp(26), dp(20), TEXT, true, Paint.Align.RIGHT);
-            drawText(c, "BEST", headerRect.right - dp(14), headerRect.top + dp(42), dp(8.5f), MUTED, true, Paint.Align.RIGHT);
+            drawText(c, String.valueOf(highScore), headerRect.right - dp(14), titleY + dp(2), dp(20), TEXT, true, Paint.Align.RIGHT);
+            drawText(c, "BEST", headerRect.right - dp(14), labelY, dp(8.5f), MUTED, true, Paint.Align.RIGHT);
 
             drawButton(c, pauseRect, paused ? "PLAY" : "PAUSE", pressedRect == pauseRect, false);
             drawButton(c, restartRect, "RESTART", pressedRect == restartRect, false);
@@ -419,17 +433,14 @@ public class MainActivity extends Activity {
                 if (i == 0) {
                     paint.setColor(GREEN_DARK);
                     float eye = cell * .055f;
-                    float ex = l + (dx >= 0 ? tempRect.width() * .70f : tempRect.width() * .30f);
-                    float ey1 = t + tempRect.height() * .33f;
-                    float ey2 = t + tempRect.height() * .67f;
                     if (dy != 0) {
-                        ey1 = t + (dy > 0 ? tempRect.height() * .70f : tempRect.height() * .30f);
-                        ex = l + tempRect.width() * .35f;
-                        c.drawCircle(ex, ey1, eye, paint);
-                        c.drawCircle(l + tempRect.width() * .65f, ey1, eye, paint);
+                        float ey = t + (dy > 0 ? tempRect.height() * .70f : tempRect.height() * .30f);
+                        c.drawCircle(l + tempRect.width() * .35f, ey, eye, paint);
+                        c.drawCircle(l + tempRect.width() * .65f, ey, eye, paint);
                     } else {
-                        c.drawCircle(ex, ey1, eye, paint);
-                        c.drawCircle(ex, ey2, eye, paint);
+                        float ex = l + (dx >= 0 ? tempRect.width() * .70f : tempRect.width() * .30f);
+                        c.drawCircle(ex, t + tempRect.height() * .33f, eye, paint);
+                        c.drawCircle(ex, t + tempRect.height() * .67f, eye, paint);
                     }
                 }
             }
@@ -444,7 +455,7 @@ public class MainActivity extends Activity {
         }
 
         private void drawControls(Canvas c) {
-            drawText(c, "SWIPE ANYWHERE OR USE CONTROLS", controlsRect.centerX(), controlsRect.top + dp(16),
+            drawText(c, "SWIPE ANYWHERE OR USE CONTROLS", controlsRect.centerX(), controlsRect.top + dp(18),
                     dp(9.5f), MUTED, true, Paint.Align.CENTER);
             drawButton(c, upRect, "▲", pressedRect == upRect, true);
             drawButton(c, leftRect, "◀", pressedRect == leftRect, true);
@@ -455,14 +466,16 @@ public class MainActivity extends Activity {
         private void drawOverlay(Canvas c) {
             drawPanel(c, overlayRect, dp(22), SURFACE_2, BORDER);
             float cx = overlayRect.centerX();
+            float titleY = overlayRect.top + dp(48);
+            float metaY = overlayRect.top + dp(82);
 
             if (gameOver) {
-                drawText(c, "GAME OVER", cx, overlayRect.top + dp(48), dp(23), TEXT, true, Paint.Align.CENTER);
-                drawText(c, "Score " + score + "  •  Best " + highScore, cx, overlayRect.top + dp(75), dp(13), MUTED, false, Paint.Align.CENTER);
+                drawText(c, "GAME OVER", cx, titleY, dp(23), TEXT, true, Paint.Align.CENTER);
+                drawText(c, "Score " + score + "  •  Best " + highScore, cx, metaY, dp(13), MUTED, false, Paint.Align.CENTER);
                 drawPrimaryButton(c, playAgainRect, "PLAY AGAIN", pressedRect == playAgainRect);
             } else {
-                drawText(c, "PAUSED", cx, overlayRect.top + dp(48), dp(23), TEXT, true, Paint.Align.CENTER);
-                drawText(c, "Ready when you are", cx, overlayRect.top + dp(75), dp(13), MUTED, false, Paint.Align.CENTER);
+                drawText(c, "PAUSED", cx, titleY, dp(23), TEXT, true, Paint.Align.CENTER);
+                drawText(c, "Ready when you are", cx, metaY, dp(13), MUTED, false, Paint.Align.CENTER);
                 drawPrimaryButton(c, playAgainRect, "RESUME", pressedRect == playAgainRect);
             }
         }
@@ -481,11 +494,12 @@ public class MainActivity extends Activity {
         private void drawButton(Canvas c, RectF rect, String label, boolean isPressed, boolean big) {
             paint.setStyle(Paint.Style.FILL);
             paint.setColor(isPressed ? PRESSED : SURFACE_2);
-            c.drawRoundRect(rect, dp(big ? 18 : 15), dp(big ? 18 : 15), paint);
+            float radius = dp(big ? 18 : 15);
+            c.drawRoundRect(rect, radius, radius, paint);
             paint.setStyle(Paint.Style.STROKE);
             paint.setStrokeWidth(dp(1));
             paint.setColor(isPressed ? GREEN : BORDER);
-            c.drawRoundRect(rect, dp(big ? 18 : 15), dp(big ? 18 : 15), paint);
+            c.drawRoundRect(rect, radius, radius, paint);
             paint.setStyle(Paint.Style.FILL);
             drawText(c, label, rect.centerX(), rect.centerY() + dp(big ? 7 : 4),
                     dp(big ? 24 : 10.5f), TEXT, true, Paint.Align.CENTER);
@@ -493,8 +507,8 @@ public class MainActivity extends Activity {
 
         private void drawPrimaryButton(Canvas c, RectF rect, String label, boolean isPressed) {
             paint.setStyle(Paint.Style.FILL);
-            paint.setColor(isPressed ? Color.rgb(134, 255, 154) : GREEN);
-            c.drawRoundRect(rect, dp(17), dp(17), paint);
+            paint.setColor(isPressed ? Color.rgb(133, 255, 154) : GREEN);
+            c.drawRoundRect(rect, dp(18), dp(18), paint);
             drawText(c, label, rect.centerX(), rect.centerY() + dp(4), dp(12), BG, true, Paint.Align.CENTER);
         }
 
@@ -519,7 +533,7 @@ public class MainActivity extends Activity {
             return null;
         }
 
-        private boolean handleDirectionButtonDown(RectF target) {
+        private boolean handleImmediateControl(RectF target) {
             if (target == upRect) { queueDirection(0, -1); return true; }
             if (target == downRect) { queueDirection(0, 1); return true; }
             if (target == leftRect) { queueDirection(-1, 0); return true; }
@@ -527,9 +541,9 @@ public class MainActivity extends Activity {
             return false;
         }
 
-        private void handleSwipe(float x, float y) {
-            float sx = x - touchDownX;
-            float sy = y - touchDownY;
+        private void processSwipe(float x, float y) {
+            float sx = x - swipeAnchorX;
+            float sy = y - swipeAnchorY;
             float ax = Math.abs(sx);
             float ay = Math.abs(sy);
             if (Math.max(ax, ay) < swipeThreshold) return;
@@ -537,9 +551,8 @@ public class MainActivity extends Activity {
             if (ax > ay) queueDirection(sx > 0 ? 1 : -1, 0);
             else queueDirection(0, sy > 0 ? 1 : -1);
 
-            touchDownX = x;
-            touchDownY = y;
-            gestureTurnConsumed = true;
+            swipeAnchorX = x;
+            swipeAnchorY = y;
         }
 
         @Override
@@ -551,9 +564,12 @@ public class MainActivity extends Activity {
                 case MotionEvent.ACTION_DOWN: {
                     touchDownX = x;
                     touchDownY = y;
-                    gestureTurnConsumed = false;
+                    swipeAnchorX = x;
+                    swipeAnchorY = y;
+                    swipeArmed = true;
                     pressedRect = targetAt(x, y);
-                    if (handleDirectionButtonDown(pressedRect)) {
+
+                    if (handleImmediateControl(pressedRect)) {
                         postInvalidateOnAnimation();
                         return true;
                     }
@@ -562,37 +578,42 @@ public class MainActivity extends Activity {
                 }
 
                 case MotionEvent.ACTION_MOVE: {
-                    RectF now = targetAt(x, y);
-                    if (pressedRect == upRect || pressedRect == downRect || pressedRect == leftRect || pressedRect == rightRect) {
-                        if (now != pressedRect) pressedRect = null;
-                    } else if (pressedRect == null) {
-                        handleSwipe(x, y);
+                    RectF hover = targetAt(x, y);
+                    if (hover != pressedRect && (pressedRect == pauseRect || pressedRect == restartRect || pressedRect == playAgainRect)) {
+                        pressedRect = hover;
                     }
+                    if (swipeArmed && pressedRect == null) processSwipe(x, y);
                     postInvalidateOnAnimation();
                     return true;
                 }
 
                 case MotionEvent.ACTION_UP: {
                     RectF released = targetAt(x, y);
-
                     if (released == pauseRect && pressedRect == pauseRect) {
                         if (!gameOver) paused = !paused;
+                        performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
                     } else if (released == restartRect && pressedRect == restartRect) {
                         restartGame();
                     } else if (released == playAgainRect && pressedRect == playAgainRect) {
                         if (gameOver) restartGame();
                         else paused = false;
-                    } else if (!gestureTurnConsumed && pressedRect == null) {
-                        handleSwipe(x, y);
+                    } else if (gameOver && overlayRect.contains(x, y)) {
+                        restartGame();
+                    } else if (paused && boardRect.contains(x, y)) {
+                        paused = false;
+                    } else if (swipeArmed && Math.hypot(x - touchDownX, y - touchDownY) >= swipeThreshold) {
+                        processSwipe(x, y);
                     }
 
                     pressedRect = null;
+                    swipeArmed = false;
                     postInvalidateOnAnimation();
                     return true;
                 }
 
                 case MotionEvent.ACTION_CANCEL:
                     pressedRect = null;
+                    swipeArmed = false;
                     postInvalidateOnAnimation();
                     return true;
             }
@@ -607,7 +628,7 @@ public class MainActivity extends Activity {
 
         void resumeForLifecycle() {
             lifecyclePaused = false;
-            startFrameLoop();
+            lastFrameNanos = 0L;
             postInvalidateOnAnimation();
         }
 
