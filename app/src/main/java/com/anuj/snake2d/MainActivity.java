@@ -93,6 +93,7 @@ public class MainActivity extends Activity {
         private static final int BG = Color.rgb(5, 11, 9);
         private static final int SURFACE = Color.rgb(14, 25, 20);
         private static final int SURFACE_2 = Color.rgb(18, 35, 27);
+        private static final int SURFACE_3 = Color.rgb(22, 43, 33);
         private static final int BOARD = Color.rgb(7, 16, 13);
         private static final int BORDER = Color.rgb(34, 63, 49);
         private static final int GRID_LINE = Color.rgb(20, 38, 31);
@@ -103,6 +104,8 @@ public class MainActivity extends Activity {
         private static final int GREEN_DARK = Color.rgb(29, 91, 50);
         private static final int RED = Color.rgb(255, 93, 106);
         private static final int PRESSED = Color.rgb(31, 83, 54);
+        private static final int SCRIM = Color.argb(130, 4, 8, 7);
+        private static final int BLUR_TINT = Color.argb(96, 28, 52, 41);
 
         private static final Typeface REGULAR = Typeface.create("sans-serif", Typeface.NORMAL);
         private static final Typeface BOLD = Typeface.create("sans-serif", Typeface.BOLD);
@@ -125,13 +128,18 @@ public class MainActivity extends Activity {
         private final RectF rightRect = new RectF();
         private final RectF overlayRect = new RectF();
         private final RectF playAgainRect = new RectF();
+        private final RectF secondaryActionRect = new RectF();
         private final RectF tempRect = new RectF();
+        private final RectF levelChipRect = new RectF();
+        private final RectF modeChipRect = new RectF();
 
         private Point food = new Point(5, 5);
         private int dx = 1;
         private int dy = 0;
         private int score = 0;
         private int highScore = 0;
+        private int foodsEaten = 0;
+        private boolean newBestThisRun = false;
         private boolean paused = false;
         private boolean gameOver = false;
         private boolean lifecyclePaused = false;
@@ -168,6 +176,17 @@ public class MainActivity extends Activity {
 
         private float dp(float value) { return value * density; }
 
+        private int level() {
+            return Math.max(1, foodsEaten / 4 + 1);
+        }
+
+        private String speedLabel() {
+            if (tickMs <= 82) return "INSANE";
+            if (tickMs <= 98) return "FAST";
+            if (tickMs <= 120) return "QUICK";
+            return "SMOOTH";
+        }
+
         private void startFrameLoop() {
             if (frameLoopRunning) return;
             frameLoopRunning = true;
@@ -203,12 +222,12 @@ public class MainActivity extends Activity {
         protected void onSizeChanged(int w, int h, int oldw, int oldh) {
             float side = dp(12);
             float top = dp(12);
-            float headerH = dp(104);
+            float headerH = dp(108);
             headerRect.set(side, top, w - side, top + headerH);
 
             float boardGap = dp(10);
             float bottomSafe = dp(16);
-            float controlsMinH = dp(190);
+            float controlsMinH = dp(194);
             float availableWidth = w - side * 2f;
             float availableForBoard = h - headerRect.bottom - controlsMinH - bottomSafe - boardGap * 2f;
             boardSize = Math.min(availableWidth, availableForBoard);
@@ -225,6 +244,11 @@ public class MainActivity extends Activity {
                     headerRect.left + dp(12) + actionW, actionTop + actionH);
             restartRect.set(headerRect.right - dp(12) - actionW, actionTop,
                     headerRect.right - dp(12), actionTop + actionH);
+
+            float chipTop = headerRect.top + dp(56);
+            levelChipRect.set(headerRect.centerX() - dp(46), chipTop,
+                    headerRect.centerX() + dp(46), chipTop + dp(18));
+            modeChipRect.set(levelChipRect.left, chipTop + dp(22), levelChipRect.right, chipTop + dp(40));
 
             float controlsTop = boardRect.bottom + dp(10);
             float controlsBottom = h - bottomSafe;
@@ -247,17 +271,20 @@ public class MainActivity extends Activity {
             leftRect.set(downRect.left - gap - horizontalW, rowTop, downRect.left - gap, rowTop + btnH);
             rightRect.set(downRect.right + gap, rowTop, downRect.right + gap + horizontalW, rowTop + btnH);
 
-            float overlayH = Math.min(dp(196), boardSize * .42f);
-            overlayH = Math.max(dp(174), overlayH);
-            float overlayWInset = Math.max(dp(28), boardSize * .08f);
+            float overlayW = boardSize * .84f;
+            float overlayH = Math.min(dp(224), boardSize * .48f);
+            overlayH = Math.max(dp(188), overlayH);
+            float overlayLeft = boardRect.centerX() - overlayW / 2f;
             float overlayTop = boardRect.centerY() - overlayH / 2f;
-            overlayRect.set(boardRect.left + overlayWInset, overlayTop,
-                    boardRect.right - overlayWInset, overlayTop + overlayH);
+            overlayRect.set(overlayLeft, overlayTop, overlayLeft + overlayW, overlayTop + overlayH);
 
             float buttonH = dp(48);
-            float buttonBottom = overlayRect.bottom - dp(16);
-            playAgainRect.set(overlayRect.left + dp(24), buttonBottom - buttonH,
-                    overlayRect.right - dp(24), buttonBottom);
+            float buttonGap = dp(10);
+            float buttonBottom = overlayRect.bottom - dp(18);
+            playAgainRect.set(overlayRect.left + dp(22), buttonBottom - buttonH,
+                    overlayRect.right - dp(22), buttonBottom);
+            secondaryActionRect.set(playAgainRect.left, playAgainRect.top - buttonGap - dp(30),
+                    playAgainRect.right, playAgainRect.top - buttonGap);
         }
 
         private void restartGame() {
@@ -271,6 +298,8 @@ public class MainActivity extends Activity {
             dy = 0;
             directionQueue.clear();
             score = 0;
+            foodsEaten = 0;
+            newBestThisRun = false;
             tickMs = 150L;
             paused = false;
             gameOver = false;
@@ -354,6 +383,7 @@ public class MainActivity extends Activity {
                 if (score > highScore) {
                     highScore = score;
                     prefs.edit().putInt("high_score", highScore).apply();
+                    newBestThisRun = true;
                 }
                 performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
                 return;
@@ -362,8 +392,11 @@ public class MainActivity extends Activity {
             snake.add(0, next);
             if (growing) {
                 score += 10;
-                if (score > highScore) highScore = score;
-                prefs.edit().putInt("high_score", highScore).apply();
+                foodsEaten += 1;
+                if (score > highScore) {
+                    highScore = score;
+                    prefs.edit().putInt("high_score", highScore).apply();
+                }
                 tickMs = Math.max(70L, 150L - (score / 30) * 4L);
                 spawnFood();
                 performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
@@ -395,6 +428,9 @@ public class MainActivity extends Activity {
 
             drawText(c, String.valueOf(highScore), headerRect.right - dp(14), titleY + dp(2), dp(20), TEXT, true, Paint.Align.RIGHT);
             drawText(c, "BEST", headerRect.right - dp(14), labelY, dp(8.5f), MUTED, true, Paint.Align.RIGHT);
+
+            drawChip(c, levelChipRect, "LEVEL " + level());
+            drawChip(c, modeChipRect, speedLabel() + " • " + tickMs + "ms");
 
             drawButton(c, pauseRect, paused ? "PLAY" : "PAUSE", pressedRect == pauseRect, false);
             drawButton(c, restartRect, "RESTART", pressedRect == restartRect, false);
@@ -464,19 +500,43 @@ public class MainActivity extends Activity {
         }
 
         private void drawOverlay(Canvas c) {
+            drawOverlayBackdrop(c);
             drawPanel(c, overlayRect, dp(22), SURFACE_2, BORDER);
             float cx = overlayRect.centerX();
-            float titleY = overlayRect.top + dp(48);
-            float metaY = overlayRect.top + dp(82);
+            float cy = overlayRect.centerY();
 
             if (gameOver) {
-                drawText(c, "GAME OVER", cx, titleY, dp(23), TEXT, true, Paint.Align.CENTER);
-                drawText(c, "Score " + score + "  •  Best " + highScore, cx, metaY, dp(13), MUTED, false, Paint.Align.CENTER);
+                drawText(c, "GAME OVER", cx, cy - dp(26), dp(24), TEXT, true, Paint.Align.CENTER);
+                drawText(c, "Score " + score + "  •  Best " + highScore, cx, cy + dp(4), dp(13.5f), MUTED, false, Paint.Align.CENTER);
+                String secondary = newBestThisRun ? "NEW BEST UNLOCKED" : ("Foods " + foodsEaten + "  •  Level " + level());
+                drawText(c, secondary, cx, cy + dp(28), dp(11.5f), GREEN, true, Paint.Align.CENTER);
                 drawPrimaryButton(c, playAgainRect, "PLAY AGAIN", pressedRect == playAgainRect);
             } else {
-                drawText(c, "PAUSED", cx, titleY, dp(23), TEXT, true, Paint.Align.CENTER);
-                drawText(c, "Ready when you are", cx, metaY, dp(13), MUTED, false, Paint.Align.CENTER);
+                drawText(c, "PAUSED", cx, cy - dp(20), dp(23), TEXT, true, Paint.Align.CENTER);
+                drawText(c, "Resume when ready", cx, cy + dp(8), dp(13), MUTED, false, Paint.Align.CENTER);
+                drawText(c, "Level " + level() + "  •  " + speedLabel(), cx, cy + dp(30), dp(11.5f), GREEN, true, Paint.Align.CENTER);
                 drawPrimaryButton(c, playAgainRect, "RESUME", pressedRect == playAgainRect);
+            }
+        }
+
+        private void drawOverlayBackdrop(Canvas c) {
+            paint.setStyle(Paint.Style.FILL);
+            paint.setColor(SCRIM);
+            c.drawRect(0, 0, getWidth(), getHeight(), paint);
+
+            paint.setColor(BLUR_TINT);
+            c.drawRoundRect(boardRect, dp(18), dp(18), paint);
+            c.drawRoundRect(controlsRect, dp(18), dp(18), paint);
+
+            float[] scales = new float[]{1.06f, 1.12f, 1.18f};
+            int[] alphas = new int[]{48, 24, 12};
+            for (int i = 0; i < scales.length; i++) {
+                float growX = overlayRect.width() * (scales[i] - 1f) * .5f;
+                float growY = overlayRect.height() * (scales[i] - 1f) * .5f;
+                tempRect.set(overlayRect.left - growX, overlayRect.top - growY,
+                        overlayRect.right + growX, overlayRect.bottom + growY);
+                paint.setColor(Color.argb(alphas[i], 190, 255, 222));
+                c.drawRoundRect(tempRect, dp(28), dp(28), paint);
             }
         }
 
@@ -489,6 +549,17 @@ public class MainActivity extends Activity {
             paint.setColor(border);
             c.drawRoundRect(rect, radius, radius, paint);
             paint.setStyle(Paint.Style.FILL);
+        }
+
+        private void drawChip(Canvas c, RectF rect, String label) {
+            paint.setStyle(Paint.Style.FILL);
+            paint.setColor(SURFACE_3);
+            c.drawRoundRect(rect, dp(9), dp(9), paint);
+            paint.setStyle(Paint.Style.STROKE);
+            paint.setStrokeWidth(dp(.9f));
+            paint.setColor(BORDER);
+            c.drawRoundRect(rect, dp(9), dp(9), paint);
+            drawText(c, label, rect.centerX(), rect.centerY() + dp(3.5f), dp(9), GREEN_BRIGHT, true, Paint.Align.CENTER);
         }
 
         private void drawButton(Canvas c, RectF rect, String label, boolean isPressed, boolean big) {
