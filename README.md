@@ -15,6 +15,8 @@ A lightweight native Android Snake game.
 ## Build
 GitHub Actions automatically builds a debug APK on push. Download the `Snake-2D-APK` artifact from the workflow run.
 
+Workflow: `.github/workflows/build-apk.yml`
+
 Local build with Gradle 8.7 + JDK 17:
 
 ```bash
